@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat P2P - Código Corto</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); width: 100%; max-width: 480px; }
+        h2 { margin-top: 0; color: #333; text-align: center; }
+        .section { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #e9ecef; }
+        label { font-size: 14px; font-weight: bold; color: #495057; display: block; margin-bottom: 5px; }
+        .id-box { display: flex; gap: 8px; margin-top: 5px; }
+        input[type="text"] { flex: 1; padding: 10px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; outline: none; }
+        button { padding: 10px 15px; background: #0d6efd; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #0b5ed7; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        #chat-box { height: 250px; border: 1px solid #ced4da; border-radius: 6px; padding: 12px; overflow-y: auto; background: #fff; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .msg { padding: 8px 12px; border-radius: 8px; max-width: 80%; font-size: 14px; word-wrap: break-word; }
+        .msg.mío { background: #d1e7dd; color: #0f5132; align-self: flex-end; }
+        .msg.otro { background: #e2e3e5; color: #41464b; align-self: flex-start; }
+        .msg.sistema { background: #fff3cd; color: #664d03; align-self: center; font-size: 12px; }
+        .status { font-size: 12px; color: #6c757d; text-align: center; margin-bottom: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Chat P2P - Código Corto</h2>
+    <div id="status" class="status">Estado: Introduce un código para iniciar</div>
+
+    <!-- Sección 1: Crear tu propia clave -->
+    <div class="section" id="section-crear">
+        <label>1. Crea tu código (ej. 8 dígitos):</label>
+        <div class="id-box">
+            <input type="text" id="custom-id" maxlength="15" placeholder="Ej: 12345678">
+            <button onclick="iniciarServidor()">Crear Sala</button>
+        </div>
+    </div>
+
+    <!-- Sección 2: Conectarse a la clave de la otra PC -->
+    <div class="section">
+        <label>2. Unirse a la sala del otro PC:</label>
+        <div class="id-box">
+            <input type="text" id="peer-id" placeholder="Pega el código de la otra PC">
+            <button id="btn-conectar" onclick="conectarAPeer()" disabled>Conectar</button>
+        </div>
+    </div>
+
+    <!-- Área de Chat -->
+    <div id="chat-box"></div>
+
+    <div class="id-box">
+        <input type="text" id="mensaje" placeholder="Escribe un mensaje..." disabled>
+        <button id="btn-enviar" onclick="enviarMensaje()" disabled>Enviar</button>
+    </div>
+</div>
+
+<script>
+    let peer = null;
+    let conn = null;
+
+    const statusDiv = document.getElementById('status');
+    const customIdInput = document.getElementById('custom-id');
+    const peerIdInput = document.getElementById('peer-id');
+    const chatBox = document.getElementById('chat-box');
+    const mensajeInput = document.getElementById('mensaje');
+    const btnEnviar = document.getElementById('btn-enviar');
+    const btnConectar = document.getElementById('btn-conectar');
+
+    function iniciarServidor() {
+        const miClave = customIdInput.value.trim();
+        if (!miClave) {
+            alert('Por favor escribe un código válido.');
+            return;
+        }
+
+        peer = new Peer(miClave);
+
+        peer.on('open', (id) => {
+            statusDiv.textContent = `Estado: Sala creada (${id}). Esperando conexión...`;
+            statusDiv.style.color = '#198754';
+            customIdInput.disabled = true;
+            document.querySelector('#section-crear button').disabled = true;
+            btnConectar.disabled = false;
+        });
+
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id') {
+                alert('Ese código ya está en uso por otra persona en el mundo. Prueba con otro.');
+            } else {
+                alert('Error de conexión: ' + err.type);
+            }
+            statusDiv.textContent = 'Error: Código no disponible';
+            statusDiv.style.color = '#dc3545';
+        });
+
+        peer.on('connection', (conexion) => {
+            conn = conexion;
+            configurarConexion();
+            agregarMensaje('¡Se ha conectado un usuario a tu sala!', 'sistema');
+        });
+    }
+
+    function conectarAPeer() {
+        const destId = peerIdInput.value.trim();
+        if (!destId) {
+            alert('Por favor ingresa el código de la otra PC');
+            return;
+        }
+
+        if (!peer) {
+            peer = new Peer();
+            peer.on('open', () => {
+                realizarConexion(destId);
+            });
+            peer.on('error', (err) => {
+                alert('Error al inicializar cliente: ' + err.type);
+            });
+        } else {
+            realizarConexion(destId);
+        }
+    }
+
+    function realizarConexion(destId) {
+        statusDiv.textContent = 'Conectando a la sala...';
+        conn = peer.connect(destId);
+        configurarConexion();
+    }
+
+    function configurarConexion() {
+        conn.on('open', () => {
+            statusDiv.textContent = 'Estado: ¡Conexión P2P Establecida!';
+            statusDiv.style.color = '#0d6efd';
+            
+            mensajeInput.disabled = false;
+            btnEnviar.disabled = false;
+            mensajeInput.focus();
+        });
+
+        conn.on('data', (data) => {
+            agregarMensaje(data, 'otro');
+        });
+
+        conn.on('close', () => {
+            agregarMensaje('La conexión se ha cerrado.', 'sistema');
+            mensajeInput.disabled = true;
+            btnEnviar.disabled = true;
+            statusDiv.textContent = 'Estado: Desconectado';
+            statusDiv.style.color = '#6c757d';
+        });
+    }
+
+    function enviarMensaje() {
+        const texto = mensajeInput.value.trim();
+        if (texto && conn && conn.open) {
+            conn.send(texto);
+            agregarMensaje(texto, 'mío');
+            mensajeInput.value = '';
+        }
+    }
+
+    function agregarMensaje(texto, tipo) {
+        const msgDiv = document.createElement('div');
+        msgDiv.classList.add('msg', tipo);
+        msgDiv.textContent = texto;
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    mensajeInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') enviarMensaje();
+    });
+</script>
+
+</body>
+</html>
